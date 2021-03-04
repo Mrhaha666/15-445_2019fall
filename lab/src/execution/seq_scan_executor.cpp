@@ -24,13 +24,20 @@ void SeqScanExecutor::Init() {
 }
 
 bool SeqScanExecutor::Next(Tuple *tuple) {
+  const auto *output_schema = plan_->OutputSchema();
+  const auto &output_column = output_schema->GetColumns();
+  std::vector<Value> values(output_schema->GetColumnCount());
   auto predicate = plan_->GetPredicate();
   while (iter_ != table_metadata_->table_->End() && (predicate != nullptr) &&
-         !predicate->Evaluate(iter_.operator->(), GetOutputSchema()).GetAs<bool>()) {
+         !predicate->Evaluate(&(*iter_), &table_metadata_->schema_).GetAs<bool>()) {
     ++iter_;
   }
+
   if (iter_ != table_metadata_->table_->End()) {
-    *tuple = *iter_.operator->();
+    for (size_t i = 0; i < values.size(); ++i) {
+      values[i] = output_column[i].GetExpr()->Evaluate(tuple, &table_metadata_->schema_);
+    }
+    *tuple = Tuple(values, output_schema);
     ++iter_;
     return true;
   }
